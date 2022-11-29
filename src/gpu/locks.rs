@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use ec_gpu::GpuEngine;
 use ec_gpu_gen::fft::FftKernel;
 use ec_gpu_gen::rust_gpu_tools::Device;
+use ec_gpu_gen::EcError;
 use fs2::FileExt;
 use log::{debug, info, warn};
 use pairing::Engine;
@@ -26,18 +27,18 @@ pub struct GPULock(File);
 impl GPULock {
     pub fn lock() -> GPULock {
         let gpu_lock_file = tmp_path(GPU_LOCK_NAME);
-        debug!("Acquiring GPU lock at {:?} ...", &gpu_lock_file);
+        info!("Acquiring GPU lock at {:?} ...", &gpu_lock_file);
         let f = File::create(&gpu_lock_file)
             .unwrap_or_else(|_| panic!("Cannot create GPU lock file at {:?}", &gpu_lock_file));
         f.lock_exclusive().unwrap();
-        debug!("GPU lock acquired!");
+        info!("GPU lock acquired!");
         GPULock(f)
     }
 }
 impl Drop for GPULock {
     fn drop(&mut self) {
         self.0.unlock().unwrap();
-        debug!("GPU lock released!");
+        info!("GPU lock released!");
     }
 }
 
@@ -50,7 +51,7 @@ pub struct PriorityLock(File);
 impl PriorityLock {
     pub fn lock() -> PriorityLock {
         let priority_lock_file = tmp_path(PRIORITY_LOCK_NAME);
-        debug!("Acquiring priority lock at {:?} ...", &priority_lock_file);
+        info!("Acquiring priority lock at {:?} ...", &priority_lock_file);
         let f = File::create(&priority_lock_file).unwrap_or_else(|_| {
             panic!(
                 "Cannot create priority lock file at {:?}",
@@ -58,7 +59,7 @@ impl PriorityLock {
             )
         });
         f.lock_exclusive().unwrap();
-        debug!("Priority lock acquired!");
+        info!("Priority lock acquired!");
         PriorityLock(f)
     }
 
@@ -95,13 +96,13 @@ impl PriorityLock {
 impl Drop for PriorityLock {
     fn drop(&mut self) {
         self.0.unlock().unwrap();
-        debug!("Priority lock released!");
+        info!("Priority lock released!");
     }
 }
 
 fn create_fft_kernel<'a, E>(priority: bool) -> Option<FftKernel<'a, E>>
-where
-    E: Engine + GpuEngine,
+    where
+        E: Engine + GpuEngine,
 {
     let devices = Device::all();
     let kernel = if priority {
@@ -111,7 +112,9 @@ where
             PriorityLock::should_break(true)
         })
     } else {
-        FftKernel::create(&devices)
+        FftKernel::create_with_abort(&devices, &|| -> bool {
+            PriorityLock::should_break(false)
+        })
     };
     match kernel {
         Ok(k) => {
@@ -126,8 +129,8 @@ where
 }
 
 fn create_multiexp_kernel<'a, E>(priority: bool) -> Option<CpuGpuMultiexpKernel<'a, E>>
-where
-    E: Engine + GpuEngine,
+    where
+        E: Engine + GpuEngine,
 {
     let devices = Device::all();
     let kernel = if priority {
@@ -137,7 +140,9 @@ where
             PriorityLock::should_break(true)
         })
     } else {
-        CpuGpuMultiexpKernel::create(&devices)
+        CpuGpuMultiexpKernel::create_with_abort(&devices, &|| -> bool {
+            PriorityLock::should_break(false)
+        })
     };
     match kernel {
         Ok(k) => {
@@ -217,6 +222,9 @@ macro_rules! locked_kernel {
                             // Re-trying to run on the GPU is the core of this loop, all other
                             // cases abort the loop.
                             Err(GpuError::GpuTaken) => {
+                                self.free();
+                            }
+                            Err(GpuError::EcGpu(EcError::Aborted)) => {
                                 self.free();
                             }
                             Err(e) => {

@@ -107,10 +107,10 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for ProvingAssignment<Scalar> 
     }
 
     fn alloc<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
-    where
-        F: FnOnce() -> Result<Scalar, SynthesisError>,
-        A: FnOnce() -> AR,
-        AR: Into<String>,
+        where
+            F: FnOnce() -> Result<Scalar, SynthesisError>,
+            A: FnOnce() -> AR,
+            AR: Into<String>,
     {
         self.aux_assignment.push(f()?);
         self.a_aux_density.add_element();
@@ -120,10 +120,10 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for ProvingAssignment<Scalar> 
     }
 
     fn alloc_input<F, A, AR>(&mut self, _: A, f: F) -> Result<Variable, SynthesisError>
-    where
-        F: FnOnce() -> Result<Scalar, SynthesisError>,
-        A: FnOnce() -> AR,
-        AR: Into<String>,
+        where
+            F: FnOnce() -> Result<Scalar, SynthesisError>,
+            A: FnOnce() -> AR,
+            AR: Into<String>,
     {
         self.input_assignment.push(f()?);
         self.b_input_density.add_element();
@@ -132,12 +132,12 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for ProvingAssignment<Scalar> 
     }
 
     fn enforce<A, AR, LA, LB, LC>(&mut self, _: A, a: LA, b: LB, c: LC)
-    where
-        A: FnOnce() -> AR,
-        AR: Into<String>,
-        LA: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
-        LB: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
-        LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+        where
+            A: FnOnce() -> AR,
+            AR: Into<String>,
+            LA: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+            LB: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
+            LC: FnOnce(LinearCombination<Scalar>) -> LinearCombination<Scalar>,
     {
         let a = a(LinearCombination::zero());
         let b = b(LinearCombination::zero());
@@ -183,9 +183,9 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for ProvingAssignment<Scalar> 
     }
 
     fn push_namespace<NR, N>(&mut self, _: N)
-    where
-        NR: Into<String>,
-        N: FnOnce() -> NR,
+        where
+            NR: Into<String>,
+            N: FnOnce() -> NR,
     {
         // Do nothing; we don't care about namespaces in this context.
     }
@@ -224,10 +224,10 @@ pub fn create_random_proof_batch_priority<E, C, R, P: ParameterSource<E>>(
     rng: &mut R,
     priority: bool,
 ) -> Result<Vec<Proof<E>>, SynthesisError>
-where
-    E: GpuEngine + MultiMillerLoop,
-    C: Circuit<E::Fr> + Send,
-    R: RngCore,
+    where
+        E: GpuEngine + MultiMillerLoop,
+        C: Circuit<E::Fr> + Send,
+        R: RngCore,
 {
     let r_s = (0..circuits.len())
         .map(|_| E::Fr::random(&mut *rng))
@@ -246,9 +246,9 @@ pub fn create_proof_batch_priority_nonzk<E, C, P: ParameterSource<E>>(
     params: P,
     priority: bool,
 ) -> Result<Vec<Proof<E>>, SynthesisError>
-where
-    E: GpuEngine + MultiMillerLoop,
-    C: Circuit<E::Fr> + Send,
+    where
+        E: GpuEngine + MultiMillerLoop,
+        C: Circuit<E::Fr> + Send,
 {
     create_proof_batch_priority_inner(circuits, params, None, priority)
 }
@@ -263,9 +263,9 @@ pub fn create_proof_batch_priority<E, C, P: ParameterSource<E>>(
     s_s: Vec<E::Fr>,
     priority: bool,
 ) -> Result<Vec<Proof<E>>, SynthesisError>
-where
-    E: GpuEngine + MultiMillerLoop,
-    C: Circuit<E::Fr> + Send,
+    where
+        E: GpuEngine + MultiMillerLoop,
+        C: Circuit<E::Fr> + Send,
 {
     create_proof_batch_priority_inner(circuits, params, Some((r_s, s_s)), priority)
 }
@@ -278,11 +278,11 @@ fn create_proof_batch_priority_inner<E, C, P: ParameterSource<E>>(
     randomization: Option<(Vec<E::Fr>, Vec<E::Fr>)>,
     priority: bool,
 ) -> Result<Vec<Proof<E>>, SynthesisError>
-where
-    E: GpuEngine + MultiMillerLoop,
-    C: Circuit<E::Fr> + Send,
+    where
+        E: GpuEngine + MultiMillerLoop,
+        C: Circuit<E::Fr> + Send,
 {
-    info!("Bellperson {} is being used!", BELLMAN_VERSION);
+    info!("Bellperson {} is being used! priority {}", BELLMAN_VERSION, priority);
 
     let (start, mut provers, input_assignments, aux_assignments) =
         synthesize_circuits_batch(circuits)?;
@@ -328,8 +328,8 @@ where
     }
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
-    let prio_lock = if priority {
-        trace!("acquiring priority lock");
+        let prio_lock = if priority {
+        info!("acquiring priority lock, priority {}", priority);
         Some(PriorityLock::lock())
     } else {
         None
@@ -344,7 +344,7 @@ where
     THREAD_POOL.scoped(|s| -> Result<(), SynthesisError> {
         let params_h = &mut params_h;
         s.execute(move || {
-            debug!("get h");
+            info!("get h, priority {}", priority);
             *params_h = Some(params.get_h(n));
         });
 
@@ -364,11 +364,11 @@ where
     THREAD_POOL.scoped(|s| {
         let params_l = &mut params_l;
         s.execute(move || {
-            debug!("get l");
+            info!("get l, priority {}", priority);
             *params_l = Some(params.get_l(aux_assignment_len));
         });
 
-        debug!("multiexp h");
+        info!("multiexp h, priority {}", priority);
         for a in a_s.into_iter() {
             h_s.push(multiexp(
                 worker,
@@ -395,7 +395,7 @@ where
         let params_b_g1 = &mut params_b_g1;
         let params_b_g2 = &mut params_b_g2;
         s.execute(move || {
-            debug!("get_a b_g1 b_g2");
+            info!("get_a b_g1 b_g2, priority {}", priority);
             *params_a = Some(params.get_a(input_len, a_aux_density_total));
             if zk {
                 *params_b_g1 = Some(params.get_b_g1(b_input_density_total, b_aux_density_total));
@@ -403,7 +403,7 @@ where
             *params_b_g2 = Some(params.get_b_g2(b_input_density_total, b_aux_density_total));
         });
 
-        debug!("multiexp l");
+        info!("multiexp l, priority {}", priority);
         for aux in aux_assignments.iter() {
             l_s.push(multiexp(
                 worker,
@@ -415,7 +415,7 @@ where
         }
     });
 
-    debug!("get a b_g1");
+    info!("get a b_g1, priority {}", priority);
     let (a_inputs_source, a_aux_source) = params_a.unwrap()?;
     let params_b_g1_opt = params_b_g1.transpose()?;
 
@@ -434,16 +434,16 @@ where
         .collect::<Vec<_>>();
     drop(provers);
 
-    debug!("multiexp a b_g1");
+    info!("multiexp a b_g1, priority {}", priority);
     let inputs_g1 = input_assignments
         .iter()
         .zip(aux_assignments.iter())
         .zip(densities.iter())
         .map(
             |(
-                (input_assignment, aux_assignment),
-                (a_aux_density, b_input_density, b_aux_density),
-            )| {
+                 (input_assignment, aux_assignment),
+                 (a_aux_density, b_input_density, b_aux_density),
+             )| {
                 let a_inputs = multiexp(
                     worker,
                     a_inputs_source.clone(),
@@ -490,10 +490,10 @@ where
     drop(a_aux_source);
     drop(params_b_g1_opt);
 
-    debug!("get b_g2");
+    info!("get b_g2, priority {}", priority);
     let (b_g2_inputs_source, b_g2_aux_source) = params_b_g2.unwrap()?;
 
-    debug!("multiexp b_g2");
+    info!("multiexp b_g2, priority {}", priority);
     let inputs_g2 = input_assignments
         .iter()
         .zip(aux_assignments.iter())
@@ -524,7 +524,7 @@ where
     drop(b_g2_inputs_source);
     drop(b_g2_aux_source);
 
-    debug!("proofs");
+    info!("proofs, priority {}", priority);
     let proofs = h_s
         .into_iter()
         .zip(l_s.into_iter())
@@ -534,9 +534,9 @@ where
         .zip(s_s.into_iter())
         .map(
             |(
-                ((((h, l), (a_inputs, a_aux, b_g1_inputs_aux_opt)), (b_g2_inputs, b_g2_aux)), r),
-                s,
-            )| {
+                 ((((h, l), (a_inputs, a_aux, b_g1_inputs_aux_opt)), (b_g2_inputs, b_g2_aux)), r),
+                 s,
+             )| {
                 if (vk.delta_g1.is_identity() | vk.delta_g2.is_identity()).into() {
                     // If this element is zero, someone is trying to perform a
                     // subversion-CRS attack.
@@ -584,12 +584,12 @@ where
 
     #[cfg(any(feature = "cuda", feature = "opencl"))]
     {
-        trace!("dropping priority lock");
+        info!("dropping priority lock, priority {}", priority);
         drop(prio_lock);
     }
 
     let proof_time = start.elapsed();
-    info!("prover time: {:?}", proof_time);
+    info!("prover time: {:?}, priority {}", proof_time, priority);
 
     Ok(proofs)
 }
@@ -599,8 +599,8 @@ fn execute_fft<E>(
     prover: &mut ProvingAssignment<E::Fr>,
     fft_kern: &mut Option<LockedFFTKernel<E>>,
 ) -> Result<Arc<Vec<<E::Fr as PrimeField>::Repr>>, SynthesisError>
-where
-    E: GpuEngine + MultiMillerLoop,
+    where
+        E: GpuEngine + MultiMillerLoop,
 {
     let mut a = EvaluationDomain::from_coeffs(std::mem::take(&mut prover.a))?;
     let mut b = EvaluationDomain::from_coeffs(std::mem::take(&mut prover.b))?;
@@ -639,9 +639,9 @@ fn synthesize_circuits_batch<Scalar, C>(
     ),
     SynthesisError,
 >
-where
-    Scalar: PrimeField,
-    C: Circuit<Scalar> + Send,
+    where
+        Scalar: PrimeField,
+        C: Circuit<Scalar> + Send,
 {
     let start = Instant::now();
     let mut provers = circuits
